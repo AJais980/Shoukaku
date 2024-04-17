@@ -223,6 +223,17 @@ export class Connection extends EventEmitter {
     }
 
     /**
+     * Move the current bot user to a different voice channel
+     * @param channelId The channel ID of the voice channel to move to
+     */
+    
+    public setVoiceChannel(channelId: string): void {
+        this.channelId = channelId;
+        this.sendVoiceUpdate();
+        this.debug(`[Voice] -> [Discord] : Channel Moved | Channel: ${this.channelId} Guild: ${this.guildId}`);
+        this.connect();
+    }
+    /**
      * Send voice data to discord
      * @internal
      */

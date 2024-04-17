@@ -5,7 +5,12 @@ import { OpCodes, State, ShoukakuDefaults } from '../Constants';
 import { Exception, Track, UpdatePlayerInfo, UpdatePlayerOptions } from '../node/Rest';
 
 export type TrackEndReason = 'finished' | 'loadFailed' | 'stopped' | 'replaced' | 'cleanup';
-export type PlayerEventType = 'TrackStartEvent' | 'TrackEndEvent' | 'TrackExceptionEvent' | 'TrackStuckEvent' | 'WebSocketClosedEvent';
+
+export type PlayerEventType = 'TrackStartEvent' | 'TrackEndEvent' | 'TrackExceptionEvent' | 'TrackStuckEvent' | 'WebSocketClosedEvent' | 'SegmentsLoaded' | 'SegmentSkipped' | 'ChapterStarted' | 'ChaptersLoaded';
+
+export type SponsorBlockSegmentEvents = SponsorBlockSegmentSkipped | SponsorBlockSegmentsLoaded | SponsorBlockChapterStarted | SponsorBlockChaptersLoaded;
+
+export type SponsorBlockSegmentEventType = "SegmentSkipped" | "SegmentsLoaded" | "ChaptersLoaded" | "ChapterStarted";
 
 /**
  * Options when playing a new track
@@ -38,8 +43,15 @@ export interface KaraokeSettings {
     monoLevel?: number;
     filterBand?: number;
     filterWidth?: number;
+} 
+export interface EchoSettings {
+    delay: number;
+    decay: number;
+    reverb?: {
+        delays: number[];
+        gains: number[];
+    };
 }
-
 export interface TimescaleSettings {
     speed?: number;
     pitch?: number;
@@ -117,12 +129,52 @@ export interface WebSocketClosedEvent extends PlayerEvent {
     reason: string;
 }
 
+
+export interface SponsorBlockSegmentsLoaded extends PlayerEvent {
+    type: "SegmentsLoaded";
+    segments: {
+        category: string;
+        start: number;
+        end: number;
+    }[]
+}
+export interface SponsorBlockSegmentSkipped extends PlayerEvent {
+    type: "SegmentSkipped";
+    segment: {
+        category: string;
+        start: number;
+        end: number;
+    }
+}
+
+export interface SponsorBlockChapterStarted extends PlayerEvent {
+    type: "ChapterStarted";
+    chapter: {
+        name: string;
+        start: number;
+        end: number;
+        duration: number;
+    }
+}
+
+
+export interface SponsorBlockChaptersLoaded extends PlayerEvent {
+    type: "ChaptersLoaded";
+    chapters: {
+        name: string;
+        start: number;
+        end: number;
+        duration: number;
+    }[]
+}
+
+
 export interface PlayerUpdate {
     op: OpCodes.PLAYER_UPDATE;
     state: {
-      connected: boolean;
-      position?: number;
-      time: number;
+        connected: boolean;
+        position?: number;
+        time: number;
     };
     guildId: string;
 }
@@ -130,14 +182,15 @@ export interface PlayerUpdate {
 export interface FilterOptions {
     volume?: number;
     equalizer?: Band[];
-    karaoke?: KaraokeSettings|null;
-    timescale?: TimescaleSettings|null;
-    tremolo?: FreqSettings|null;
-    vibrato?: FreqSettings|null;
-    rotation?: RotationSettings|null;
-    distortion?: DistortionSettings|null;
-    channelMix?: ChannelMixSettings|null;
-    lowPass?: LowPassSettings|null;
+    karaoke?: KaraokeSettings | null;
+    timescale?: TimescaleSettings | null;
+    tremolo?: FreqSettings | null;
+    vibrato?: FreqSettings | null;
+    rotation?: RotationSettings | null;
+    distortion?: DistortionSettings | null;
+    channelMix?: ChannelMixSettings | null;
+    lowPass?: LowPassSettings | null;
+    echo?: EchoSettings | null;
 }
 
 export declare interface Player {
@@ -176,6 +229,31 @@ export declare interface Player {
      * @eventProperty
      */
     on(event: 'update', listener: (data: PlayerUpdate) => void): this;
+    /**
+     * 
+     * Emitted when a sponsorblock segment is skipped
+     * @eventProperty
+     */
+    on(event: 'SegmentSkipped', listener: (data: SponsorBlockSegmentSkipped) => void): this;
+    /**
+     * 
+     * Emitted when a sponsorblock segment is loaded
+     * @eventProperty
+     */
+    on(event: 'SegmentsLoaded', listener: (data: SponsorBlockSegmentsLoaded) => void): this;
+    /**
+     * 
+     * Emitted when a sponsorblock chapter is loaded
+     * @eventProperty
+     */
+    on(event: 'ChapterStarted', listener: (data: SponsorBlockChapterStarted) => void): this;
+    /**
+     * 
+     * Emitted when a sponsorblock chapter is loaded
+     * @eventProperty
+     */
+    on(event: 'ChaptersLoaded', listener: (data: SponsorBlockChaptersLoaded) => void): this;
+
     once(event: 'end', listener: (reason: TrackEndEvent) => void): this;
     once(event: 'stuck', listener: (data: TrackStuckEvent) => void): this;
     once(event: 'closed', listener: (reason: WebSocketClosedEvent) => void): this;
@@ -207,7 +285,7 @@ export class Player extends EventEmitter {
     /**
      * ID of current track
      */
-    public track: string|null;
+    public track: string | null;
     /**
      * Global volume of the player
      */
@@ -271,7 +349,7 @@ export class Player extends EventEmitter {
     public async move(name?: string): Promise<boolean> {
         const connection = this.node.manager.connections.get(this.guildId);
         const node = this.node.manager.nodes.get(name!) || this.node.manager.options.nodeResolver(this.node.manager.nodes, connection);
-        if (!node && ![ ...this.node.manager.nodes.values() ].some(node => node.state === State.CONNECTED))
+        if (!node && ![...this.node.manager.nodes.values()].some(node => node.state === State.CONNECTED))
             throw new Error('No available nodes to move to');
         if (!node || node.name === this.node.name || node.state !== State.CONNECTED) return false;
         let lastNode = this.node.manager.nodes.get(this.node.name);
@@ -373,7 +451,7 @@ export class Player extends EventEmitter {
      * Sets the filter volume of the player
      * @param volume Target volume 0.0-5.0
      */
-    public async setFilterVolume(volume: number):  Promise<void> {
+    public async setFilterVolume(volume: number): Promise<void> {
         this.filters.volume = volume;
         await this.setFilters(this.filters);
     }
@@ -385,6 +463,15 @@ export class Player extends EventEmitter {
         this.filters.equalizer = equalizer;
         await this.setFilters(this.filters);
 
+    }
+
+    /**
+     * Change the echo settings applied to the currently playing track
+     * @param echo An object that conforms to the EchoSettings type that defines a delay and decay
+     */
+    public async setEcho(echo: EchoSettings): Promise<void> {
+        this.filters.echo = echo || null;
+        await this.setFilters(this.filters);
     }
 
     /**
@@ -487,6 +574,7 @@ export class Player extends EventEmitter {
             distortion: null,
             channelMix: null,
             lowPass: null,
+            echo: null
         });
     }
 
@@ -508,7 +596,7 @@ export class Player extends EventEmitter {
      * If you want to update the whole player yourself, sends raw update player info to lavalink
      */
     public async update(updatePlayer: UpdatePlayerInfo): Promise<void> {
-        const data = { ...updatePlayer, ...{ guildId: this.guildId, sessionId: this.node.sessionId! }};
+        const data = { ...updatePlayer, ...{ guildId: this.guildId, sessionId: this.node.sessionId! } };
         await this.node.rest.updatePlayer(data);
         if (updatePlayer.playerOptions) {
             const options = updatePlayer.playerOptions;
@@ -583,6 +671,19 @@ export class Player extends EventEmitter {
             case 'WebSocketClosedEvent':
                 this.emit('closed', json);
                 break;
+            case 'SegmentSkipped':
+                this.emit('SegmentSkipped', json);
+                break;
+            case 'SegmentsLoaded':
+                this.emit('SegmentsLoaded', json);
+                break;
+            case 'ChapterStarted':
+                this.emit('ChapterStarted', json);
+                break;
+            case 'ChaptersLoaded':
+                this.emit('ChaptersLoaded', json);
+                break;
+            
             default:
                 this.node.emit(
                     'debug',

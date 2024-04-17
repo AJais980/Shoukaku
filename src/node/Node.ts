@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { IncomingMessage } from 'http';
 import { NodeOption, Shoukaku } from '../Shoukaku';
-import { OpCodes, State, Versions } from '../Constants';
+import { OpCodes, State } from '../Constants';
 import { wait } from '../Utils';
 import { Rest } from './Rest';
 import Websocket from 'ws';
@@ -68,7 +68,7 @@ export interface ResumableHeaders {
     'Session-Id': string;
 }
 
-export interface NonResumableHeaders extends Omit<ResumableHeaders, 'Session-Id'> {}
+export interface NonResumableHeaders extends Omit<ResumableHeaders, 'Session-Id'> { }
 
 /**
  * Represents a Lavalink node
@@ -113,19 +113,23 @@ export class Node extends EventEmitter {
     /**
      * Statistics from Lavalink
      */
-    public stats: NodeStats|null;
+    public stats: NodeStats | null;
     /**
      * Information about lavalink node
     */
-    public info: NodeInfo|null;
+    public info: NodeInfo | null;
     /**
      * Websocket instance
      */
-    public ws: Websocket|null;
+    public ws: Websocket | null;
     /**
      * SessionId of this Lavalink connection (not to be confused with Discord SessionId)
      */
-    public sessionId: string|null;
+    public sessionId: string | null;
+    /**
+     * Resume key of this Lavalink connection
+     */
+    public resumeKey: string | null;
     /**
      * Boolean that represents if the node has initialized once
      */
@@ -149,9 +153,14 @@ export class Node extends EventEmitter {
         this.rest = new (this.manager.options.structures.rest || Rest)(this, options);
         this.name = options.name;
         this.group = options.group;
-        this.version = `/v${Versions.WEBSOCKET_VERSION}`;
-        this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}`;
+        this.version = options.version || 'v4';
+        if (this.version === "v4") {
+            this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}/${this.version}/websocket`;
+        } else {
+            this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}`;
+        }
         this.auth = options.auth;
+        this.resumeKey = this.manager.options.resumeKey || null;
         this.reconnects = 0;
         this.state = State.DISCONNECTED;
         this.stats = null;
@@ -199,18 +208,23 @@ export class Node extends EventEmitter {
 
         this.state = State.CONNECTING;
 
-        const headers: NonResumableHeaders|ResumableHeaders = {
+        const headers: NonResumableHeaders | ResumableHeaders = {
             'Client-Name': this.manager.options.userAgent,
             'User-Agent': this.manager.options.userAgent,
             'Authorization': this.auth,
             'User-Id': this.manager.id
         };
 
-        if (this.sessionId) headers['Resume-Key'] = this.sessionId;
+        if (this.version === "v4") {
+            if (this.sessionId) headers["Session-Id"] = this.sessionId;
+        } else {
+            if (this.resumeKey) headers["Resume-Key"] = this.resumeKey;
+        }
+
         this.emit('debug', `[Socket] -> [${this.name}] : Connecting ${this.url}, Version: ${this.version}, Trying to resume? ${!!this.sessionId}`);
         if (!this.initialized) this.initialized = true;
 
-        const url = new URL(`${this.url}${this.version}/websocket`);
+        const url = new URL(`${this.url}`);
         this.ws = new Websocket(url.toString(), { headers } as Websocket.ClientOptions);
         this.ws.once('upgrade', response => this.open(response));
         this.ws.once('close', (...args) => this.close(...args));
@@ -223,7 +237,7 @@ export class Node extends EventEmitter {
      * @param code Status code
      * @param reason Reason for disconnect
      */
-    public disconnect(code: number, reason?:string): void {
+    public disconnect(code: number, reason?: string): void {
         if (this.destroyed) return;
 
         this.destroyed = true;
@@ -257,14 +271,14 @@ export class Node extends EventEmitter {
         const json = JSON.parse(message as string);
         if (!json) return;
         this.emit('raw', json);
-        switch(json.op) {
+        switch (json.op) {
             case OpCodes.STATS:
                 this.emit('debug', `[Socket] <- [${this.name}] : Node Status Update | Server Load: ${this.penalties}`);
                 this.stats = json;
                 break;
             case OpCodes.READY:
                 this.sessionId = json.sessionId;
-                const players = [ ...this.manager.players.values() ].filter(player => player.node.name === this.name);
+                const players = [...this.manager.players.values()].filter(player => player.node.name === this.name);
                 const resumeByLibrary = this.initialized && (players.length && this.manager.options.resumeByLibrary);
                 if (!json.resumed && resumeByLibrary) {
                     try {
@@ -279,7 +293,7 @@ export class Node extends EventEmitter {
                 this.emit('ready', json.resumed || resumeByLibrary);
 
                 if (this.manager.options.resume) {
-                    await this.rest.updateSession(this.manager.options.resume, this.manager.options.resumeTimeout);
+                    await this.rest.updateSession(this.manager.options.resume, this.manager.options.resumeTimeout, this.manager.options.resumeKey);
                     this.emit('debug', `[Socket] -> [${this.name}] : Resuming configured!`);
                 }
                 break;
@@ -315,7 +329,7 @@ export class Node extends EventEmitter {
      * To emit error events easily
      * @param error error message
      */
-    public error(error: Error|unknown): void {
+    public error(error: Error | unknown): void {
         this.emit('error', error);
     }
 
@@ -393,7 +407,7 @@ export class Node extends EventEmitter {
      * @internal
      */
     private async movePlayers(): Promise<number> {
-        const players = [ ...this.manager.players.values() ];
+        const players = [...this.manager.players.values()];
         const data = await Promise.allSettled(players.map(player => player.move()));
         return data.filter(results => results.status === 'fulfilled').length;
     }

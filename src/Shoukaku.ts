@@ -39,6 +39,11 @@ export interface NodeOption {
      * Group of this node
      */
     group?: string;
+    
+    /**
+     * The version of the Lavalink server
+     */
+    version?: string | "v3" | "v4";
 }
 
 export interface ShoukakuOptions {
@@ -46,6 +51,10 @@ export interface ShoukakuOptions {
      * Whether to resume a connection on disconnect to Lavalink (Server Side) (Note: DOES NOT RESUME WHEN THE LAVALINK SERVER DIES)
      */
     resume?: boolean;
+    /**
+     * The key to use to resume a connection on disconnect to Lavalink (Server Side) (Note: DOES NOT RESUME WHEN THE LAVALINK SERVER DIES)
+     */
+    resumeKey?: string;
     /**
      * Time to wait before lavalink starts to destroy the players of the disconnected client
      */

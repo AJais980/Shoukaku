@@ -1,9 +1,11 @@
 import { Node, NodeInfo, NodeStats } from './Node';
 import { NodeOption } from '../Shoukaku';
-import { Versions } from '../Constants';
 import { FilterOptions } from '../guild/Player';
 
 export type Severity = 'common' | 'suspicious' | 'fault';
+
+export const validSponsorBlocks = ["sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "music_offtopic", "filler"];
+export type SponsorBlockSegment = "sponsor" | "selfpromo" | "interaction" | "intro" | "outro" | "preview" | "music_offtopic" | "filler";
 
 export enum LoadType {
     TRACK = 'track',
@@ -190,8 +192,13 @@ export class Rest {
      */
     constructor(node: Node, options: NodeOption) {
         this.node = node;
-        this.url = `${options.secure ? 'https' : 'http'}://${options.url}`;
-        this.version = `/v${Versions.REST_VERSION}`;
+        this.version = options.version || 'v4';
+        if (!['v3', 'v4'].includes(this.version)) throw new Error("Unsupported Lavalink version");
+        if (this.version === 'v4') {
+            this.url = `${options.secure ? 'https' : 'http'}://${options.url}/v4`;
+        } else {
+            this.url = `${options.secure ? 'https' : 'http'}://${options.url}/v3`;
+        }
         this.auth = options.auth;
     }
 
@@ -283,17 +290,33 @@ export class Rest {
      * Updates the session with a resume boolean and timeout
      * @param resuming Whether resuming is enabled for this session or not
      * @param timeout Timeout to wait for resuming
+     * @param resumingKey Resuming key to use
      * @returns Promise that resolves to a Lavalink player
      */
-    public updateSession(resuming?: boolean, timeout?: number): Promise<SessionInfo | undefined> {
-        const options = {
-            endpoint: `/sessions/${this.sessionId}`,
-            options: {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: { resuming, timeout }
-            }
-        };
+    public updateSession(resuming?: boolean, timeout?: number, resumingKey?: string): Promise<void> {
+        let options: FetchOptions;
+        
+        if (this.node.version === "v4") {
+            options = {
+                endpoint: `/sessions/${this.sessionId}`,
+                options: {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: { resuming, timeout }
+                }
+            };
+        } else if (this.node.version === "v3") {
+            options = {
+                endpoint: `/sessions/${this.sessionId}`,
+                options: {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: { resumingKey, timeout }
+                }
+            };
+        } else {
+            throw new Error("Unsupported Lavalink version");
+        }
         return this.fetch(options);
     }
 
@@ -351,6 +374,55 @@ export class Rest {
     }
 
     /**
+     * 
+     * Get sponsorblock categories
+     * @param guildId guildId where this player is
+     * @returns 
+     */
+    public getSponsorBlock(guildId: string): Promise<string[]|undefined> {
+        const options = {
+            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
+            options: {}
+        };
+        return this.fetch(options);
+    }
+
+    /**
+     * 
+     * set sponsorblock categories
+     * @param guildId guildId where this player is
+     * @param categories categories to update
+     */
+    public async setSponsorBlock(guildId: string, segments: SponsorBlockSegment[] = ["sponsor", "selfpromo"]): Promise<void> {
+        if (!segments.every(c => validSponsorBlocks.includes(c.toLocaleLowerCase()))) throw new Error("Invalid SponsorBlock Category");
+        const options: FetchOptions = {
+            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
+            options: {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: { segments }
+            }
+        };
+        await this.fetch(options);
+    }
+
+    /**
+     *
+     * Delete sponsorblock categories
+     * @param guildId guildId where this player is
+     */
+    public async deleteSponsorBlock(guildId: string): Promise<void> {
+        const options = {
+            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
+            options: {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' }
+            }
+        };
+        await this.fetch(options);
+    }
+
+    /**
      * Make a request to Lavalink
      * @param fetchOptions.endpoint Lavalink endpoint
      * @param fetchOptions.options Options passed to fetch
@@ -365,8 +437,8 @@ export class Rest {
 
         if (options.headers) headers = { ...headers, ...options.headers };
 
-        const url = new URL(`${this.url}${this.version}${endpoint}`);
-
+        const url = new URL(`${this.url}${endpoint}`);
+        
         if (options.params) url.search = new URLSearchParams(options.params).toString();
 
         const abortController = new AbortController();

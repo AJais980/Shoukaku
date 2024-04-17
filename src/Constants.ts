@@ -24,13 +24,10 @@ export enum OpCodes {
     READY = 'ready'
 }
 
-export enum Versions {
-    REST_VERSION = 4,
-    WEBSOCKET_VERSION = 4
-}
 
 export const ShoukakuDefaults: Required<ShoukakuOptions> = {
     resume: false,
+    resumeKey: '',
     resumeTimeout: 30,
     resumeByLibrary: false,
     reconnectTries: 3,
@@ -51,5 +48,6 @@ export const NodeDefaults: NodeOption = {
     url: '',
     auth: '',
     secure: false,
+    version: "",
     group: undefined
 };
