@@ -5,12 +5,7 @@ import { OpCodes, State, ShoukakuDefaults } from '../Constants';
 import { Exception, Track, UpdatePlayerInfo, UpdatePlayerOptions } from '../node/Rest';
 
 export type TrackEndReason = 'finished' | 'loadFailed' | 'stopped' | 'replaced' | 'cleanup';
-
-export type PlayerEventType = 'TrackStartEvent' | 'TrackEndEvent' | 'TrackExceptionEvent' | 'TrackStuckEvent' | 'WebSocketClosedEvent' | 'SegmentsLoaded' | 'SegmentSkipped' | 'ChapterStarted' | 'ChaptersLoaded';
-
-export type SponsorBlockSegmentEvents = SponsorBlockSegmentSkipped | SponsorBlockSegmentsLoaded | SponsorBlockChapterStarted | SponsorBlockChaptersLoaded;
-
-export type SponsorBlockSegmentEventType = "SegmentSkipped" | "SegmentsLoaded" | "ChaptersLoaded" | "ChapterStarted";
+export type PlayerEventType = 'TrackStartEvent' | 'TrackEndEvent' | 'TrackExceptionEvent' | 'TrackStuckEvent' | 'WebSocketClosedEvent';
 
 /**
  * Options when playing a new track
@@ -43,7 +38,7 @@ export interface KaraokeSettings {
     monoLevel?: number;
     filterBand?: number;
     filterWidth?: number;
-} 
+}
 export interface EchoSettings {
     delay: number;
     decay: number;
@@ -129,46 +124,6 @@ export interface WebSocketClosedEvent extends PlayerEvent {
     reason: string;
 }
 
-
-export interface SponsorBlockSegmentsLoaded extends PlayerEvent {
-    type: "SegmentsLoaded";
-    segments: {
-        category: string;
-        start: number;
-        end: number;
-    }[]
-}
-export interface SponsorBlockSegmentSkipped extends PlayerEvent {
-    type: "SegmentSkipped";
-    segment: {
-        category: string;
-        start: number;
-        end: number;
-    }
-}
-
-export interface SponsorBlockChapterStarted extends PlayerEvent {
-    type: "ChapterStarted";
-    chapter: {
-        name: string;
-        start: number;
-        end: number;
-        duration: number;
-    }
-}
-
-
-export interface SponsorBlockChaptersLoaded extends PlayerEvent {
-    type: "ChaptersLoaded";
-    chapters: {
-        name: string;
-        start: number;
-        end: number;
-        duration: number;
-    }[]
-}
-
-
 export interface PlayerUpdate {
     op: OpCodes.PLAYER_UPDATE;
     state: {
@@ -229,31 +184,6 @@ export declare interface Player {
      * @eventProperty
      */
     on(event: 'update', listener: (data: PlayerUpdate) => void): this;
-    /**
-     * 
-     * Emitted when a sponsorblock segment is skipped
-     * @eventProperty
-     */
-    on(event: 'SegmentSkipped', listener: (data: SponsorBlockSegmentSkipped) => void): this;
-    /**
-     * 
-     * Emitted when a sponsorblock segment is loaded
-     * @eventProperty
-     */
-    on(event: 'SegmentsLoaded', listener: (data: SponsorBlockSegmentsLoaded) => void): this;
-    /**
-     * 
-     * Emitted when a sponsorblock chapter is loaded
-     * @eventProperty
-     */
-    on(event: 'ChapterStarted', listener: (data: SponsorBlockChapterStarted) => void): this;
-    /**
-     * 
-     * Emitted when a sponsorblock chapter is loaded
-     * @eventProperty
-     */
-    on(event: 'ChaptersLoaded', listener: (data: SponsorBlockChaptersLoaded) => void): this;
-
     once(event: 'end', listener: (reason: TrackEndEvent) => void): this;
     once(event: 'stuck', listener: (data: TrackStuckEvent) => void): this;
     once(event: 'closed', listener: (reason: WebSocketClosedEvent) => void): this;
@@ -671,19 +601,6 @@ export class Player extends EventEmitter {
             case 'WebSocketClosedEvent':
                 this.emit('closed', json);
                 break;
-            case 'SegmentSkipped':
-                this.emit('SegmentSkipped', json);
-                break;
-            case 'SegmentsLoaded':
-                this.emit('SegmentsLoaded', json);
-                break;
-            case 'ChapterStarted':
-                this.emit('ChapterStarted', json);
-                break;
-            case 'ChaptersLoaded':
-                this.emit('ChaptersLoaded', json);
-                break;
-            
             default:
                 this.node.emit(
                     'debug',

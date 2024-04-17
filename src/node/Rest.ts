@@ -1,11 +1,9 @@
 import { Node, NodeInfo, NodeStats } from './Node';
 import { NodeOption } from '../Shoukaku';
+import { Versions } from '../Constants';
 import { FilterOptions } from '../guild/Player';
 
 export type Severity = 'common' | 'suspicious' | 'fault';
-
-export const validSponsorBlocks = ["sponsor", "selfpromo", "interaction", "intro", "outro", "preview", "music_offtopic", "filler"];
-export type SponsorBlockSegment = "sponsor" | "selfpromo" | "interaction" | "intro" | "outro" | "preview" | "music_offtopic" | "filler";
 
 export enum LoadType {
     TRACK = 'track',
@@ -106,7 +104,7 @@ export interface LavalinkPlayerVoice {
     ping?: number
 }
 
-export interface LavalinkPlayerVoiceOptions extends Omit<LavalinkPlayerVoice, 'connected'|'ping'> {}
+export interface LavalinkPlayerVoiceOptions extends Omit<LavalinkPlayerVoice, 'connected' | 'ping'> { }
 
 export interface LavalinkPlayer {
     guildId: string,
@@ -118,11 +116,11 @@ export interface LavalinkPlayer {
 }
 
 export interface UpdatePlayerOptions {
-    encoded?: string|null;
+    encoded?: string | null;
     /**
     * @deprecated this may not work in newer lavalink versions, use "encoded" instead
     */
-    encodedTrack?: string|null;
+    encodedTrack?: string | null;
     identifier?: string;
     position?: number;
     endTime?: number;
@@ -192,13 +190,8 @@ export class Rest {
      */
     constructor(node: Node, options: NodeOption) {
         this.node = node;
-        this.version = options.version || 'v4';
-        if (!['v3', 'v4'].includes(this.version)) throw new Error("Unsupported Lavalink version");
-        if (this.version === 'v4') {
-            this.url = `${options.secure ? 'https' : 'http'}://${options.url}/v4`;
-        } else {
-            this.url = `${options.secure ? 'https' : 'http'}://${options.url}/v3`;
-        }
+        this.url = `${options.secure ? 'https' : 'http'}://${options.url}`;
+        this.version = `/v${Versions.REST_VERSION}`;
         this.auth = options.auth;
     }
 
@@ -214,7 +207,7 @@ export class Rest {
     public resolve(identifier: string): Promise<LavalinkResponse | undefined> {
         const options = {
             endpoint: '/loadtracks',
-            options: { params: { identifier }}
+            options: { params: { identifier } }
         };
         return this.fetch(options);
     }
@@ -227,7 +220,7 @@ export class Rest {
     public decode(track: string): Promise<Track | undefined> {
         const options = {
             endpoint: '/decodetrack',
-            options: { params: { track }}
+            options: { params: { track } }
         };
         return this.fetch<Track>(options);
     }
@@ -290,33 +283,17 @@ export class Rest {
      * Updates the session with a resume boolean and timeout
      * @param resuming Whether resuming is enabled for this session or not
      * @param timeout Timeout to wait for resuming
-     * @param resumingKey Resuming key to use
      * @returns Promise that resolves to a Lavalink player
      */
-    public updateSession(resuming?: boolean, timeout?: number, resumingKey?: string): Promise<void> {
-        let options: FetchOptions;
-        
-        if (this.node.version === "v4") {
-            options = {
-                endpoint: `/sessions/${this.sessionId}`,
-                options: {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: { resuming, timeout }
-                }
-            };
-        } else if (this.node.version === "v3") {
-            options = {
-                endpoint: `/sessions/${this.sessionId}`,
-                options: {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: { resumingKey, timeout }
-                }
-            };
-        } else {
-            throw new Error("Unsupported Lavalink version");
-        }
+    public updateSession(resuming?: boolean, timeout?: number): Promise<SessionInfo | undefined> {
+        const options = {
+            endpoint: `/sessions/${this.sessionId}`,
+            options: {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: { resuming, timeout }
+            }
+        };
         return this.fetch(options);
     }
 
@@ -363,7 +340,7 @@ export class Rest {
     /**
      * Get Lavalink info
      */
-    public getLavalinkInfo(): Promise<NodeInfo|undefined> {
+    public getLavalinkInfo(): Promise<NodeInfo | undefined> {
         const options = {
             endpoint: '/info',
             options: {
@@ -371,55 +348,6 @@ export class Rest {
             }
         };
         return this.fetch(options);
-    }
-
-    /**
-     * 
-     * Get sponsorblock categories
-     * @param guildId guildId where this player is
-     * @returns 
-     */
-    public getSponsorBlock(guildId: string): Promise<string[]|undefined> {
-        const options = {
-            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
-            options: {}
-        };
-        return this.fetch(options);
-    }
-
-    /**
-     * 
-     * set sponsorblock categories
-     * @param guildId guildId where this player is
-     * @param categories categories to update
-     */
-    public async setSponsorBlock(guildId: string, segments: SponsorBlockSegment[] = ["sponsor", "selfpromo"]): Promise<void> {
-        if (!segments.every(c => validSponsorBlocks.includes(c.toLocaleLowerCase()))) throw new Error("Invalid SponsorBlock Category");
-        const options: FetchOptions = {
-            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
-            options: {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: { segments }
-            }
-        };
-        await this.fetch(options);
-    }
-
-    /**
-     *
-     * Delete sponsorblock categories
-     * @param guildId guildId where this player is
-     */
-    public async deleteSponsorBlock(guildId: string): Promise<void> {
-        const options = {
-            endpoint: `/sessions/${this.sessionId}/players/${guildId}/sponsorblock/categories`,
-            options: {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' }
-            }
-        };
-        await this.fetch(options);
     }
 
     /**
@@ -437,8 +365,8 @@ export class Rest {
 
         if (options.headers) headers = { ...headers, ...options.headers };
 
-        const url = new URL(`${this.url}${endpoint}`);
-        
+        const url = new URL(`${this.url}${this.version}${endpoint}`);
+
         if (options.params) url.search = new URLSearchParams(options.params).toString();
 
         const abortController = new AbortController();
@@ -452,7 +380,7 @@ export class Rest {
             signal: abortController.signal
         };
 
-        if (![ 'GET', 'HEAD' ].includes(method) && options.body)
+        if (!['GET', 'HEAD'].includes(method) && options.body)
             finalFetchOptions.body = JSON.stringify(options.body);
 
         const request = await fetch(url.toString(), finalFetchOptions)

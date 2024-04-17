@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
 import { IncomingMessage } from 'http';
 import { NodeOption, Shoukaku } from '../Shoukaku';
-import { OpCodes, State } from '../Constants';
+import { OpCodes, State, Versions } from '../Constants';
 import { wait } from '../Utils';
 import { Rest } from './Rest';
 import Websocket from 'ws';
@@ -127,10 +127,6 @@ export class Node extends EventEmitter {
      */
     public sessionId: string | null;
     /**
-     * Resume key of this Lavalink connection
-     */
-    public resumeKey: string | null;
-    /**
      * Boolean that represents if the node has initialized once
      */
     protected initialized: boolean;
@@ -153,14 +149,9 @@ export class Node extends EventEmitter {
         this.rest = new (this.manager.options.structures.rest || Rest)(this, options);
         this.name = options.name;
         this.group = options.group;
-        this.version = options.version || 'v4';
-        if (this.version === "v4") {
-            this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}/${this.version}/websocket`;
-        } else {
-            this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}`;
-        }
+        this.version = `/v${Versions.WEBSOCKET_VERSION}`;
+        this.url = `${options.secure ? 'wss' : 'ws'}://${options.url}`;
         this.auth = options.auth;
-        this.resumeKey = this.manager.options.resumeKey || null;
         this.reconnects = 0;
         this.state = State.DISCONNECTED;
         this.stats = null;
@@ -215,16 +206,11 @@ export class Node extends EventEmitter {
             'User-Id': this.manager.id
         };
 
-        if (this.version === "v4") {
-            if (this.sessionId) headers["Session-Id"] = this.sessionId;
-        } else {
-            if (this.resumeKey) headers["Resume-Key"] = this.resumeKey;
-        }
-
+        if (this.sessionId) headers['Resume-Key'] = this.sessionId;
         this.emit('debug', `[Socket] -> [${this.name}] : Connecting ${this.url}, Version: ${this.version}, Trying to resume? ${!!this.sessionId}`);
         if (!this.initialized) this.initialized = true;
 
-        const url = new URL(`${this.url}`);
+        const url = new URL(`${this.url}${this.version}/websocket`);
         this.ws = new Websocket(url.toString(), { headers } as Websocket.ClientOptions);
         this.ws.once('upgrade', response => this.open(response));
         this.ws.once('close', (...args) => this.close(...args));
@@ -293,7 +279,7 @@ export class Node extends EventEmitter {
                 this.emit('ready', json.resumed || resumeByLibrary);
 
                 if (this.manager.options.resume) {
-                    await this.rest.updateSession(this.manager.options.resume, this.manager.options.resumeTimeout, this.manager.options.resumeKey);
+                    await this.rest.updateSession(this.manager.options.resume, this.manager.options.resumeTimeout);
                     this.emit('debug', `[Socket] -> [${this.name}] : Resuming configured!`);
                 }
                 break;

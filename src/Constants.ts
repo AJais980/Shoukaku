@@ -24,10 +24,13 @@ export enum OpCodes {
     READY = 'ready'
 }
 
+export enum Versions {
+    REST_VERSION = 4,
+    WEBSOCKET_VERSION = 4
+}
 
 export const ShoukakuDefaults: Required<ShoukakuOptions> = {
     resume: false,
-    resumeKey: '',
     resumeTimeout: 30,
     resumeByLibrary: false,
     reconnectTries: 3,
@@ -37,7 +40,7 @@ export const ShoukakuDefaults: Required<ShoukakuOptions> = {
     userAgent: `${Info.name}bot/${Info.version} (${Info.repository.url})`,
     structures: {},
     voiceConnectionTimeout: 15,
-    nodeResolver: (nodes) => [ ...nodes.values() ]
+    nodeResolver: (nodes) => [...nodes.values()]
         .filter(node => node.state === State.CONNECTED)
         .sort((a, b) => a.penalties - b.penalties)
         .shift()
@@ -48,6 +51,5 @@ export const NodeDefaults: NodeOption = {
     url: '',
     auth: '',
     secure: false,
-    version: "",
     group: undefined
 };

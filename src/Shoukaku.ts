@@ -11,7 +11,7 @@ export interface Structures {
     /**
      * A custom structure that extends the Rest class
      */
-    rest?:  Constructor<Rest>;
+    rest?: Constructor<Rest>;
     /**
      * A custom structure that extends the Player class
      */
@@ -39,11 +39,6 @@ export interface NodeOption {
      * Group of this node
      */
     group?: string;
-    
-    /**
-     * The version of the Lavalink server
-     */
-    version?: string | "v3" | "v4";
 }
 
 export interface ShoukakuOptions {
@@ -51,10 +46,6 @@ export interface ShoukakuOptions {
      * Whether to resume a connection on disconnect to Lavalink (Server Side) (Note: DOES NOT RESUME WHEN THE LAVALINK SERVER DIES)
      */
     resume?: boolean;
-    /**
-     * The key to use to resume a connection on disconnect to Lavalink (Server Side) (Note: DOES NOT RESUME WHEN THE LAVALINK SERVER DIES)
-     */
-    resumeKey?: string;
     /**
      * Time to wait before lavalink starts to destroy the players of the disconnected client
      */
@@ -94,7 +85,7 @@ export interface ShoukakuOptions {
     /**
      * Node Resolver to use if you want to customize it
      */
-    nodeResolver?: (nodes: Map<string, Node>, connection?: Connection) => Node|undefined;
+    nodeResolver?: (nodes: Map<string, Node>, connection?: Connection) => Node | undefined;
 }
 
 export interface VoiceChannelOptions {
@@ -184,7 +175,7 @@ export class Shoukaku extends EventEmitter {
     /**
      * Shoukaku instance identifier
      */
-    public id: string|null;
+    public id: string | null;
     /**
      * @param connector A Discord library connector
      * @param nodes An array that conforms to the NodeOption type that specifies nodes to connect to
@@ -300,7 +291,7 @@ export class Shoukaku extends EventEmitter {
         if (player) {
             try {
                 await player.destroy();
-            } catch (_) {}
+            } catch (_) { }
             player.clean();
             this.players.delete(guildId);
         }
